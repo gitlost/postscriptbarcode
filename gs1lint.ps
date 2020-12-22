@@ -34,17 +34,23 @@
     true exch {
         dup 48 lt exch 57 gt or { pop false exit } if
     } forall
-    not { pop (not numeric) false exit } if
+    not { pop (Not numeric) false exit } if
 } bind def
 
 /lintcset82 {
     true exch {
         1 string dup 0 4 -1 roll put
         (!"%&'()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz)
-        exch search not {pop pop false exit} if
+        exch search not { pop pop false exit } if
         pop pop pop
     } forall
-    not { pop (not numeric) false exit } if
+    not { pop (Not numeric) false exit } if
+} bind def
+
+/lintgs1ii {
+    (-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz)
+    exch search not {pop pop (Invalid importer index) false exit} if
+    pop pop pop
 } bind def
 
 /lintcsum {
@@ -52,51 +58,69 @@
     dup length 2 mod 0 eq {3} {1} ifelse
     exch { 48 sub 1 index mul exch 4 exch sub } forall pop
     0 counttomark 1 sub {add} repeat exch pop
-    10 mod 0 ne { pop (bad checksum) false exit } if
+    10 mod 0 ne { pop (Bad checksum) false exit } if
 } bind def
 
-/lintyymmdd {  % TODO
-    pop
+/lintiban {
+    dup length 4 lt { pop pop (IBAN too short) false exit } if
+    mark exch mark exch {} forall counttomark -4 roll counttomark array astore exch pop {
+        48 sub dup 9 gt {7 sub dup 10 idiv exch 10 mod} if
+    } forall counttomark array astore exch pop
+    0 exch {exch 10 mul add 97 mod} forall
+    1 ne { pop (IBAN checksum incorrect) false exit } if
 } bind def
 
-/lintyymmd0 {  % TODO
-    pop
+/lintnonzero {
+    false exch { 48 ne {pop true} if } forall
+    not { pop (Zero not permitted) false exit } if
 } bind def
 
-/linthh {  % TODO
-    pop
+/lintyymmd0 {
+    dup 2 2 getinterval cvi dup 1 lt exch 12 gt or { pop (Invalid month) false exit } if
+    dup 0 2 getinterval cvi dup  21  sub  % Update 20YY periodically for century calculation
+    dup 51 ge {pop 1900 add} { -50 le {2100 add} {2000 add} ifelse} ifelse  % YYYY
+    dup 400 mod 0 eq exch dup 4 mod 0 eq exch 100 mod 0 ne and or           % Leap year?
+    [ 31  3 -1 roll {29} {28} ifelse  31 30 31 30 31 31 30 31 30 31 ]
+    1 index 2 2 getinterval cvi 1 sub get
+    exch 4 2 getinterval cvi lt { pop (Invalid day of month) false exit } if
 } bind def
 
-/lintm0 {  % TODO
-    pop
+/lintyymmdd {
+    dup 4 2 getinterval cvi 1 lt { pop (Invalid day of month) false exit } if
+    lintyymmd0
 } bind def
 
-/lintmm00 {  % TODO
-    pop
+/linthhmm {
+    dup 0 2 getinterval cvi 23 gt { pop pop (Invalid hour of day) false exit } if
+    2 2 getinterval cvi 59 gt { pop (Invalid minute in the hour) false exit } if
 } bind def
 
-/lintmmoptss {  % TODO
-    pop
+/linthhoptmmss {
+    dup length dup 2 ne exch dup 4 ne exch 6 ne and and {
+        pop (Invalid length for time of day with optional mins and secs) false exit
+    } if
+    dup 0 2 getinterval cvi 23 gt { pop pop (Invalid hour of day) false exit } if
+    dup length 4 ge {
+        dup 2 2 getinterval cvi 59 gt { pop pop (Invalid minute in the hour) false exit } if
+    } if
+    dup length 6 eq {
+        4 2 getinterval cvi 59 gt { pop (Invalid second in the minute) false exit } if
+    } if
 } bind def
 
-/lintgs1ii {  % TODO
-    pop
+/lintwinding {
+    dup (0) ne exch dup (1) ne exch (9) ne and and {
+        pop (Invalid winding direction) false exit
+    } if
 } bind def
 
-/lintnonzero {  % TODO
-    pop
-} bind def
-
-/lintwinding {  % TODO
-    pop
-} bind def
-
-/lintpieceoftotal {  % TODO
-    pop
-} bind def
-
-/lintiban {  % TODO
-    pop
+/lintpieceoftotal {
+    dup length 2 mod 0 ne { pop pop (Invalid piece/total length) false exit } if
+    dup dup length 2 idiv 0 exch getinterval cvi
+    dup 0 eq { pop pop pop (Invalid piece number) false exit } if
+    exch dup length 2 idiv dup getinterval cvi
+    dup 0 eq { pop pop pop (Invalid total number) false exit } if
+    gt { pop (Piece number exceeds total) false exit } if
 } bind def
 
 /lintnacc {  % TODO
@@ -129,25 +153,26 @@
 ] {dup} forall >> def
 
 /lintisocc {
-    isocc exch known not { pop (unknown country code) false exit } if
+    isocc exch known not { pop (Unknown country code) false exit } if
 } bind def
 
 /lintmisocc {
     dup length 3 mod 0 ne {
-        pop pop (not a group of three-digit country codes) false exit
+        pop pop (Not a group of three-digit country codes) false exit
     } if
     true
     0 3 3 index length 1 sub {
         2 index exch 3 getinterval
         isocc exch known not { pop pop false exit } if
     } for
-    not { pop (unknown country code) false exit } if
+    not { pop (Unknown country code) false exit } if
     pop pop
 } bind def
 
 % Test linter functions with:
-% true 1 { (860334188) lintmisocc } repeat
+true 1 { (DE91100001000123456789) lintiban } repeat
 
+asdf
 
 % TODO Generate from the spec file
 /gs1syntax <<
@@ -359,12 +384,13 @@ begin
         dup ais exch get /ai exch def
         vals exch get /val exch def
         gs1syntax ai known {
+% TODO for each element reading maximal prefix of val
             /props gs1syntax ai get def
             val length props /min get lt {
-                pop (too short) false exit
+                pop (Too short) false exit
             } if
             val length props /max get gt {
-                pop (too long) false exit
+                pop (Too long) false exit
             } if
             << /N //lintnumeric  /X //lintcset82 >> props /cset get get val exch exec
             val length 0 gt {
