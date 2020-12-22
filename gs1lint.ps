@@ -44,10 +44,28 @@
         exch search not { pop pop false exit } if
         pop pop pop
     } forall
-    not { pop (Not numeric) false exit } if
+    not { pop (Invalid character) false exit } if
 } bind def
 
-/lintgs1ii {
+/lintcset39 {
+    true exch {
+        1 string dup 0 4 -1 roll put
+        (#-/0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ)
+        exch search not { pop pop false exit } if
+        pop pop pop
+    } forall
+    not { pop (Invalid character) false exit } if
+} bind def
+
+/lintkey {
+    dup length 2 lt { pop pop (Key is too short) false exit } if
+    dup 0 get dup 48 lt exch 57 gt or exch
+    1 get dup 48 lt exch 57 gt or or {
+        pop (Non-numeric company prefix) false exit
+    } if
+} bind def
+
+/lintimporteridx {
     (-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz)
     exch search not {pop pop (Invalid importer index) false exit} if
     pop pop pop
@@ -73,6 +91,12 @@
 /lintnonzero {
     false exch { 48 ne {pop true} if } forall
     not { pop (Zero not permitted) false exit } if
+} bind def
+
+/lintnozeroprefix {
+    dup length 1 gt exch 0 get 48 eq and {
+        pop (Zero prefix is not permitted) false exit
+    } if
 } bind def
 
 /lintyymmd0 {
@@ -108,6 +132,12 @@
     } if
 } bind def
 
+/lintyesno {
+    dup (0) ne exch (1) ne and {
+        pop (Neither 0 nor 1 for yes or no) false exit
+    } if
+} bind def
+
 /lintwinding {
     dup (0) ne exch dup (1) ne exch (9) ne and and {
         pop (Invalid winding direction) false exit
@@ -123,11 +153,22 @@
     gt { pop (Piece number exceeds total) false exit } if
 } bind def
 
-/lintnacc {  % TODO
+/lintpcesc {
+    {
+       (%) search not {pop exit} if
+       pop pop dup length 2 lt {pop pop (Invalid % escape) false exit } if
+       dup dup 0 get dup 48 lt exch 57 gt or exch
+       1 get dup 48 lt exch 57 gt or or {
+           pop pop (Invalid % escape) false exit
+       } if
+    } loop
+} bind def
+
+/lintcouponcode {  % TODO
     pop
 } bind def
 
-/lintnapo {  % TODO
+/lintcouponposoffer {  % TODO
     pop
 } bind def
 
@@ -156,7 +197,7 @@
     isocc exch known not { pop (Unknown country code) false exit } if
 } bind def
 
-/lintmisocc {
+/lintisocclist {
     dup length 3 mod 0 ne {
         pop pop (Not a group of three-digit country codes) false exit
     } if
