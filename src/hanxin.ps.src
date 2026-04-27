@@ -58,6 +58,32 @@ begin
 
 /hanxin.noblk [ 0 -1 -1 ] readonly def
 
+%
+% Encoding modes
+%
+/hanxin.NUM    1 def  % 0001  Numeric
+/hanxin.TXT    2 def  % 0010  Text
+/hanxin.BYT    3 def  % 0011  Byte
+/hanxin.CN1    4 def  % 0100  Common Chinese Region 1
+/hanxin.CN2    5 def  % 0101  Common Chinese Region 2
+/hanxin.GB2    6 def  % 0110  GB18030 2-byte
+/hanxin.GB4    7 def  % 0111  GB18030 4-byte
+
+/hanxin.FN1SEP 9 def  % pseudo mode for FNC1 separator
+
+/hanxin.fn1 -1 def
+
+%
+% GS1 mode requires framing
+%
+/hanxin.gs1pre  (11100001) readonly def
+/hanxin.gs1post (11111111) readonly def
+
+%
+% FNC1 encoding within numeric mode
+%
+/hanxin.fnc1ext (1111101000) readonly def
+
 /hanxin.metrics [
     % vers size  align  modules            error correction blocks
     [ (1)    23  -1  0    205  [  1  21   4 ] //hanxin.noblk //hanxin.noblk
@@ -659,13 +685,40 @@ begin
     /fncvals <<
         /parse parse
         /parsefnc parsefnc
-        % No FNC characters defined
+        (FNC1) //hanxin.fn1
     >> def
     barcode fncvals //parseinput exec /msg exch def
     /msglen msg length def
 
+    %
+    % FNC1 in first position activates GS1 mode
+    %
+    /fnc1first false def
+    msglen 0 gt {
+        msg 0 get //hanxin.fn1 eq {
+            /fnc1first true def
+            /msg msg 1 msglen 1 sub getinterval def
+            /msglen msg length def
+        } if
+    } if
+
+    %
+    % Outside GS1 mode, FNC1 defined as having no encoding
+    %
+    fnc1first not {
+        0 1 msglen 1 sub {
+            /i exch def
+            msg i get //hanxin.fn1 eq {
+                /bwipp.hanxinFNC1NotFirstPosition (Han Xin requires that FNC1 only appears in the first position) //raiseerror exec
+            } if
+        } for
+    } if
+
     (input.preprocess) //hanxin.after exec
 
+    %
+    % Input encoding
+    %
     (input.encoding) //hanxin.before exec
 
     /tobin {
@@ -674,21 +727,161 @@ begin
         dup length 2 index length exch sub exch putinterval
     } def
 
-    %
-    % Encode the data using byte mode encoding
-    %
-    4 13 add msglen 8 mul add { string } stopped {
-        pop /bwipp.hanxinInputTooLarge (The input data exceeds the implementation limits) //raiseerror exec
-    } if /bits exch def
-    bits 0 (0011) putinterval
-    msglen 1 13 bitshift ge {  % Exceeds 13-bit character count field
-        /bwipp.hanxinInputTooLarge (The input data exceeds the maximum symbol capacity) //raiseerror exec
-    } if
-    bits 4 msglen 13 tobin putinterval
-    0 1 msglen 1 sub {
+    /numD [ msglen {0} repeat 0 ] def
+    msglen 1 sub -1 0 {
         /i exch def
-        bits 17 i 8 mul add msg i get 8 tobin putinterval
+        msg i get dup 48 ge exch 57 le and {
+            numD i numD i 1 add get 1 add put
+        } if
     } for
+
+    %
+    % Byte-mode encoder with numeric run switching, including FNC1 support
+    %
+    mark
+    /i 0 def
+    /bytestart -1 def
+    {  % loop
+        i msglen ge {
+            bytestart -1 ne {
+                //hanxin.BYT msg bytestart i bytestart sub getinterval
+            } if
+            exit
+        } if
+        /d numD i get def
+        d  i d add msglen ge {5} {8} ifelse  ge {
+            bytestart -1 ne {
+                //hanxin.BYT msg bytestart i bytestart sub getinterval
+                /bytestart -1 def
+            } if
+            //hanxin.NUM msg i d getinterval
+            /i i d add def
+        } {
+            msg i get //hanxin.fn1 eq {
+                bytestart -1 ne {
+                    //hanxin.BYT msg bytestart i bytestart sub getinterval
+                    /bytestart -1 def
+                } if
+                //hanxin.FN1SEP null
+                /i i 1 add def
+            } {
+                bytestart -1 eq { /bytestart i def } if
+                /i i 1 add def
+            } ifelse
+        } ifelse
+    } loop
+    counttomark array astore exch pop /seq exch def
+
+    %
+    % Reject byte chunks larger than the 13-bit count field can express
+    %
+    0 2 seq length 1 sub {
+        /si exch def
+        seq si get //hanxin.BYT eq {
+            seq si 1 add get length 1 13 bitshift ge {
+                /bwipp.hanxinInputTooLarge (The input data exceeds the maximum symbol capacity) //raiseerror exec
+            } if
+        } if
+    } for
+
+    %
+    % Optimise when NUM and FN1SEP run together
+    %
+    /numRhs {  % "{FNC1}N..." => N drops indicator
+        dup 0 gt {
+            seq 1 index 2 sub get //hanxin.FN1SEP eq
+        } {
+            false
+        } ifelse
+        exch pop
+    } def
+    /numLhs {  % "N%3{FNC1}" => N drops terminator
+        dup 2 add seq length lt {
+            seq 1 index 2 add get //hanxin.FN1SEP eq
+            seq 2 index 1 add get length 3 mod 0 eq
+            and
+        } {
+            false
+        } ifelse
+        exch pop
+    } def
+    /fncRhs {  % "{FNC1}N..." => FNC1 drops terminator
+        dup 2 add seq length lt {
+            seq 1 index 2 add get //hanxin.NUM eq
+        } {
+            false
+        } ifelse
+        exch pop
+    } def
+    /fncLhs {  % "N%3{FNC1}" => FNC1 drops indicator
+        dup 0 gt {
+            seq 1 index 2 sub get //hanxin.NUM eq {
+                seq 1 index 1 sub get length 3 mod 0 eq
+            } {
+                false
+            } ifelse
+        } {
+            false
+        } ifelse
+        exch pop
+    } def
+
+    /addtobits {
+        dup length pos add bits length gt {
+            pop /bwipp.hanxinNoValidSymbol (Maximum length exceeded or invalid content) //raiseerror exec
+        } if
+        dup bits pos 3 -1 roll putinterval
+        length pos add /pos exch def
+    } def
+
+    %
+    % Encode the sequence, merging FNC1 at numeric boundaries
+    %
+    /bits 26120 string def
+    /pos 0 def
+
+    fnc1first { //hanxin.gs1pre addtobits } if
+
+    0 2 seq length 1 sub {
+        /si exch def
+        /st seq si get def
+        st //hanxin.BYT eq {
+            /sd seq si 1 add get def
+            (0011) addtobits
+            sd length 13 tobin addtobits
+            sd { 8 tobin addtobits } forall
+        } {
+        st //hanxin.FN1SEP eq {
+            si fncLhs not { (0001) addtobits } if
+            //hanxin.fnc1ext addtobits
+            si fncRhs not { (1111111111) addtobits } if
+        } {  % //hanxin.NUM
+            /sd seq si 1 add get def
+            /D sd length def
+            si numRhs not { (0001) addtobits } if
+            /numgroups D 3 div ceiling cvi def
+            0 1 numgroups 1 sub {
+                /gstart exch 3 mul def
+                /gsize D gstart sub 3 lt {D gstart sub} {3} ifelse def
+                0
+                0 1 gsize 1 sub {
+                    sd exch gstart add get 48 sub
+                    exch 10 mul add
+                } for
+                10 tobin addtobits
+            } for
+            si numLhs not {
+                  D 1 sub 3 mod 0 eq { (1111111101) }
+                { D 1 sub 3 mod 1 eq { (1111111110) }
+                                     { (1111111111) } ifelse } ifelse
+                addtobits
+            } if
+        } ifelse } ifelse
+    } for
+
+    fnc1first { //hanxin.gs1post addtobits } if
+
+    /bits bits 0 pos getinterval def
 
     options /debugbits known
     /uk.co.terryburton.bwipp.global_ctx dup where {exch get /enabledebug known} {pop false} ifelse
@@ -946,6 +1139,10 @@ begin
         /maskfuncs [//hanxin.maskfuncs mask 1 sub get] def
         /bestmaskval mask 1 sub def
     } if
+
+    %
+    % Build a candidate mask layer for each mask function
+    %
     /masks maskfuncs length array def
     0 1 masks length 1 sub {
         /m exch def
