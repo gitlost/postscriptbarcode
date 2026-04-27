@@ -690,6 +690,10 @@ begin
         bits 17 i 8 mul add msg i get 8 tobin putinterval
     } for
 
+    options /debugbits known
+    /uk.co.terryburton.bwipp.global_ctx dup where {exch get /enabledebug known} {pop false} ifelse
+    and { /bwipp.debugbits bits //raiseerror exec } if
+
     %
     % Lookup the most appropriate symbol specification
     %
@@ -745,6 +749,10 @@ begin
         } for
         cws c cw put
     } for
+
+    options /debugcws known
+    /uk.co.terryburton.bwipp.global_ctx dup where {exch get /enabledebug known} {pop false} ifelse
+    and { /bwipp.debugcws cws //raiseerror exec } if
 
     (input.encoding) //hanxin.after exec
 
@@ -829,10 +837,6 @@ begin
         pad pad length 1 sub 0 put
         /cws pad def
     } if
-
-    options /debugcws known
-    /uk.co.terryburton.bwipp.global_ctx dup where {exch get /enabledebug known} {pop false} ifelse
-    and { /bwipp.debugcws cws //raiseerror exec } if
 
     (codewords.finalise) //hanxin.after exec
 
