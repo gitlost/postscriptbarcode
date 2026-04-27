@@ -1432,3 +1432,182 @@ a readonly pop     % achieves nothing; a still writable
 proc  % First run: a = "1234"
 proc  % Subsequent: a starts as "1234", not "0000"!
 ```
+
+
+## Encoding Framework
+
+When implementing or modifying an encoder you work from a symbology
+specification. Specs vary widely in how clearly they distinguish encoder
+concerns from reader, external-standard, and host-application concerns — and
+are often muddled or incomplete on these boundaries. The framework here is the
+lens to apply when reading a spec: it makes those boundaries explicit so that
+for any feature you encounter, you can tell whether it is the encoder author's
+responsibility — and equally importantly, what is *not*.
+
+**The barcode symbol is a carrier for a sequence of bytes plus signalling
+information.** The bytes may directly carry the intended message, or an
+intermediate format (e.g. ECI-encoded data) that the receiving application
+interprets further — for example, to decode the bytes as UTF-8 instead of the
+symbology's default character encoding (typically Latin-1). The signalling —
+primarily the AIM Symbology Identifier prefix — tells the host what kind of
+data the bytes represent. Three interfaces govern how all of this gets into and
+out of the symbol, each defined by a different specification.
+
+### Interface 1 — Caller ↔ encoder (Input API)
+
+This interface is software-specific. No barcode symbology standard prescribes
+how an encoder should accept symbology features from users. Specs typically
+include an informative "user guidance" section, but it focuses on practical
+printing concerns (printing technology, error correction level, symbol size
+selection) rather than on input syntax. BWIPP's convention is described here;
+other libraries make different choices.
+
+A core principle: **BWIPP presents features harmoniously across symbologies.**
+Each base encoder absorbs symbology-specific quirks at interface 2 so the
+user-facing input syntax stays uniform across all encoders. Examples:
+
+- `^FNC1` in first position always means "GS1 mode" regardless of the target symbology — even in DotCode, whose spec inverts the position-based rule (the encoder normalises this internally; see the worked example under "Implications" below).
+- In 7-bit-native symbologies (Code 128, Code 39, etc.), the encoder automatically inserts FNC4 escapes to encode bytes 0x80-0xFF — the user just supplies the byte value (e.g. `^200`) and the encoder manages FNC4 emission and shift/latch handling at interface 2.
+
+Where applicable, `gs1*` wrapper encoders (`gs1qrcode`, `gs1datamatrix`,
+`gs1-128`, etc.) accept input in the bracketed-AI form
+`(01)12312312312312(10)ABC123` directly, producing the FNC1-prefixed form (with
+FNC1 separators inserted only where required by AI element-string lengths) for
+the base encoder. This is
+a second level of harmonisation: users work in the high-level GS1 syntax
+familiar to GS1 application designers, without needing to know the underlying
+base-encoder FNC1 conventions. See the `gs1process` section under "User API"
+above.
+
+Callers pass:
+
+- **Data characters**: literal bytes to encode.
+- **Non-data characters** (AIM term) via escape sequences when `parse` / `parsefnc` is enabled:
+  - `^FNC1`–`^FNC4` (function characters), `^ECInnnnnn` (ECI escape), `^NUL`/`^001`-`^255` (literal control bytes).
+- **Macros**, where supported — wrap the message in a data-character envelope.
+
+`parseinput` translates escapes into sentinel integers (FNCs as small
+negatives; ECIs as values < -1000000). The encoder sees one homogeneous stream
+— data bytes interleaved with sentinels.
+
+Options (`eclevel`, `version`, `parse`, etc.) are passed separately as
+`key=value` pairs and configure the encoder; they are not data.
+
+#### Function character roles
+
+These are typical roles. Symbologies routinely overload them with non-typical
+or even inverted semantics, so always consult the target spec.
+
+- **FNC1**: behaviour is defined by the barcode symbology spec strictly by *position*, without conferring meaning. **First position**: the reader sets a particular symbology-identifier modifier value. **Second position**: the reader sets a different modifier value. **Third+ position**: the reader transmits as GS (0x1D). What those positions *mean* (e.g. "GS1 AI formatted data", "AIM-denoted industry formatting", "field separator") is layered on by separate standards — GS1 General Specifications and AIM-denoted formatting standards — which the symbology spec does not reference and does not need to.
+- **FNC2**: Structured Append flag (a.k.a. Message Append) — multiple physical symbols carry one logical message, reassembled by the reader into a single read.
+- **FNC3**: reader programming flag — present anywhere in the symbol, instructs the reader to enter device configuration mode rather than transmit.
+- **FNC4**: extended ASCII for 7-bit-native symbologies — a single FNC4 shifts the next character to lift its value from 0-127 into 128-255; two consecutive FNC4s latch the lift for subsequent characters.
+
+Each FNC may be a **flag character** (an *explicit* signal: not transmitted in
+the byte stream, but the reader modifies the symbology identifier modifier so
+the host knows the feature was active) or a **formatting character** (an
+*implicit* effect: alters which bytes the reader transmits, with no other
+notification — e.g. FNC1 in third+ position is transmitted as GS, FNC4 lifts a
+byte). The same FNC may be both depending on position and symbology.
+
+Example overloads in DotCode: FNC1-in-first-position semantics are *inverted* —
+data starting with two digits is *implicitly* treated as GS1, and an explicit
+FNC1 in first position *cancels* that implicit GS1 interpretation. DotCode also
+reuses FNC2 to declare ECI in extended channel mode and uses FNC3 for message
+segmentation: one physical symbol carries multiple separately-delivered
+messages, the inverse of Structured Append. None of these match the typical
+roles above.
+
+### Interface 2 — Symbology encoding (codewords / bitstream)
+
+Per the symbology spec, the symbol's codewords / bitstream are a sequence drawn from:
+
+- **Data codewords** carrying the message in the active compaction mode (numeric digits packed as triplets, alphanumeric pairs packed into base-45, byte values, multi-byte glyph indices, etc.).
+- **Mode-change codewords**. The mechanism varies by symbology:
+  - **State machine** (Code 128, Data Matrix, Aztec, PDF417, MaxiCode, DotCode, Code 93, etc. — the prevalent approach): shift codewords (next character only) and latch codewords (subsequent characters until reset) are interleaved with data; the current mode is implicit, initialised per the symbology default and updated as shifts/latches are encountered.
+  - **TLV segments** (QR Code, Micro QR, rMQR, Han Xin Code): each contiguous block of one-mode data is bracketed by an explicit mode indicator + (where applicable) length count, followed (optionally) by a mode terminator.
+- **Encodings of non-data signals**, *each symbology- and mode-specific*. The encoded bit pattern for an in-data FNC1 (third+ position) depends on which compaction mode is active *and* whether FNC1-in-first is set. Examples: Han Xin uses the numeric extension `1111101000`; QR alphanumeric under FNC1-in-first uses `%` (with literal `%` doubled to `%%`); QR byte under FNC1-in-first uses the GS character (0x1D); Data Matrix and Aztec use dedicated codewords. Never assume an FNC1 in input becomes a particular byte in the symbol — the bit pattern depends on both the symbology and the active mode.
+- **Macros / envelope codewords** have **global effect**: a single codeword in the symbol expands at the reader into a multi-byte envelope wrapping the entire decoded message. For example, Data Matrix codeword 236 invokes Macro 05 — at the reader the byte stream sent to the host becomes `[)>` + RS + `05` + GS + [decoded data] + RS + EOT (9 envelope bytes for 1 codeword). Codeword 237 (Macro 06) is similar with `06`. The encoder emits one codeword; the reader produces the envelope; the host sees bytes added to both ends of the message that the encoder never explicitly wrote.
+- **Padding**, **ECC**, structural fixed patterns; termination via specific codeword values, padding sequences, or (in TLV-style symbologies) a dedicated mode-terminator codeword.
+
+**Modes are a compaction strategy, not semantic signalling.** Whether a byte
+run is encoded as numeric, alphanumeric, byte, or kanji is purely about output
+size. It says nothing about how those bytes are to be interpreted by the host —
+that is interface 3's job (via ECI). When a spec uses language like "Kanji input
+characters" or "Chinese characters in Region One", read it as "byte sequences
+with values within range X". Opportunistic compaction is legitimate regardless
+of intended meaning — e.g. encoding a UTF-8 byte run via QR Kanji mode when its
+bytes happen to fall in Shift JIS lead/trailer ranges.
+
+**Caveat — application standards may overstep this principle.** Some
+application standards (notably postal symbologies) dictate specific internal
+encodation choices, blurring the layer-clean rule that compaction is the
+encoder's business alone. This is technically a layering violation by the
+application standard, but when implementing an encoder against such a standard
+you follow the application standard's prescription regardless.
+
+Non-data characters at this interface (FNC bit patterns, ECI codewords,
+structured-append markers) do not pass through to interface 3. The reader
+strips or transforms them while reconstructing the byte stream. The host does
+not see the internal representation of the message at all.
+
+### Interface 3 — Reader ↔ host ("Transfer protocol")
+
+Each symbology spec includes a transfer protocol section that describes how
+its encoded features (data, mode-change codewords, FNC characters, ECI
+codewords, etc.) translate into the reader's output, and which symbology
+identifier modifier values are valid. Cross-symbology standards layer on top:
+ISO/IEC 15424 for the symbology identifier syntax, AIM ECI Specification for
+ECI escape format. All of these describe mechanics only — none confers meaning
+on the bytes transmitted. The encoder doesn't write transfer-protocol artifacts
+directly, but the encoder's symbology-encoding choices fully determine what the
+reader will produce, so the encoder must know what the reader will do.
+
+Two channels:
+
+- **Basic Channel** (no ECI in the symbol): the reader transmits the AIM Symbology Identifier prefix followed by decoded data bytes. The host interprets the whole stream using the symbology's default character set (usually ISO/IEC 8859-1; Code 128 / EAN are ASCII; Asian symbologies vary).
+- **Extended Channel** (one or more ECI codewords in the symbol): the reader transmits the prefix (with the ECI-modifier set) followed by decoded data bytes interleaved with `\nnnnnn` ECI escapes (literal `\` doubled).
+
+The host receives:
+
+- **AIM Symbology Identifier prefix** `]Xn`. `X` is the symbology code (e.g. `Q` QR, `d` Data Matrix, `h` Han Xin, `c` Code 128); `n` is a symbology-specific modifier signalling features observed during decode (`]Q1` ECI, `]Q3` GS1, `]h2` GS1, `]h4` URI, etc.).
+- **A flat byte stream**, with reader-applied transformations:
+  - FNC1 in third+ position → GS (0x1D) at the host, regardless of how the symbology encoded it. (Per the symbology spec; the symbology spec confers no meaning on this beyond the positional rule. GS1 GenSpec layers the "element separator" interpretation on top.) The reader applies the inverse transformation per the active compaction mode — e.g. in QR alphanumeric under FNC1-in-first, single `%` decodes to GS while doubled `%%` decodes to literal `%`.
+  - FNC4 (7-bit symbologies) → next byte lifted to 128-255; FNC4 itself not transmitted.
+  - ECI codewords → `\nnnnnn` (Extended Channel only).
+
+**The host has zero knowledge of the internal encodation.** Mode boundaries,
+compaction choices, and non-data characters do not survive into the byte stream
+the host sees. Strict layering follows: never use the symbol's mode boundaries
+to influence host-side character set interpretation. The encoder is free to compact
+however the symbology allows; the byte stream that the host receives is what
+determines meaning, via ECI or default character set, and only via ECI or
+default character set. Multiple ECI codewords within a single symbol designate
+code-page changes within one logical message — not a mechanism for delivering
+distinct messages.
+
+### Implications when adding or modifying an encoder
+
+1. **Input API**: define or reuse the escape sequence; ensure `parseinput` translation produces the right sentinel value.
+2. **Codewords / bitstream**: emit the bit pattern the symbology spec mandates for each non-data character. Choose modes for compaction only — never to signal interpretation.
+3. **Transfer protocol**: confirm what the reader will produce. Cross-check ISO/IEC 15424 and the symbology's Annex L equivalent (the symbology identifier modifier table) to ensure that the bit patterns emitted at interface 2 cause the reader to set the right modifier.
+
+A common implementation error is conflating the mode indicator (encoder writes
+in-band) with the AIM Symbology Identifier (reader emits to the host). They
+are at different layers. For example, Han Xin GS1 mode: the encoder writes
+mode indicator `1110 0001` into the symbol; the reader observes that and emits
+`]h2` to the host. Two distinct things.
+
+**Harmonise the user-facing input API across symbologies.** End users should
+not need to know symbology-specific quirks of how non-data characters are
+interpreted at interface 2. The encoder (or wrapper helper) translates a uniform
+input convention — e.g. `^FNC1` in first position means "GS1 mode" — into the
+symbology-correct bit pattern, even when that requires inverted or
+context-dependent logic internally. Example from `dotcode.ps.src`: when the
+user provides no FNC1 but the data starts with two digits, the encoder emits an
+explicit FNC1 to cancel DotCode's implicit GS1 trigger; when the user provides
+FNC1 followed by two digits, the encoder skips the explicit FNC1 because
+DotCode's implicit-GS1 from leading digits already activates GS1 mode. The user
+always writes `^FNC1<...>` first to mean "GS1 mode" regardless of the target
+symbology — exactly as for QR Code, Data Matrix, Aztec, and Han Xin.
+
