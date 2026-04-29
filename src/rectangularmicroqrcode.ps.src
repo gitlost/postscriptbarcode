@@ -33,7 +33,7 @@
 
 % --BEGIN ENCODER rectangularmicroqrcode--
 % --REQUIRES preamble raiseerror setuphooks processoptions parseinput setanycolor fifocache rsecbinary render renmatrix qrcode--
-% --DESC: Rectangular Micro QR Code
+% --DESC: Rectangular Micro QR Code (rMQR)
 % --EXAM: 1234
 % --EXOP: version=R17x139
 % --RNDR: renmatrix
