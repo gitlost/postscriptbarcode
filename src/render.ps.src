@@ -76,6 +76,11 @@ begin
     >>
 >> readonly def
 
+% Rotation angle per direction (also serves as the direction-validity set)
+/render.directionrotate <<
+    (forward) 0  (backward) 180  (upward) 90  (downward) 270
+>> readonly def
+
 % Template for text option groups
 /render.groupoptions <<
     ()           ()
@@ -100,10 +105,6 @@ begin
 
 /render.yalignopts <<
     /above dup  /top dup  /center dup  /bottom dup  /below dup  /justify dup
->> readonly def
-
-/render.directionoptions <<
-    /forward dup  /backward dup  /upward dup  /downward dup
 >> readonly def
 
 %
@@ -153,7 +154,7 @@ begin
             } if
         } { pop } ifelse
 
-        //render.directionoptions td (direction) get known not {
+        //render.directionrotate td (direction) get known not {
             /direction ( must be forward, backward, upward or downward) mkerr false exit
         } if
 
@@ -369,7 +370,7 @@ begin
         xalign yalign direction textwidth textheight positiontext exec moveto
         xoffset yoffset rmoveto
         gsave
-        << (forward) 0  (upward) 90  (backward) 180  (downward) 270 >> direction get rotate
+        //render.directionrotate direction get rotate
         currentpoint translate
         0 1 textlines length 1 sub {
             /i exch def
