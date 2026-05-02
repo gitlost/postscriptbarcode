@@ -708,13 +708,12 @@ begin
         /bwipp.renderXdimTooSmall
         [ (Effective X-dimension ) dim 20 string cvs (mm is below the minimum ) min 20 string cvs (mm for the ast) ]
     } {
-        max -1 ne dim max gt and {
-            /bwipp.renderXdimTooLarge
-            [ (Effective X-dimension ) dim 20 string cvs (mm is above the maximum ) max 20 string cvs (mm for the ast) ]
-        } {
-            null null  % Sentinel: ok
-        } ifelse
-    } ifelse
+    max -1 ne dim max gt and {
+        /bwipp.renderXdimTooLarge
+        [ (Effective X-dimension ) dim 20 string cvs (mm is above the maximum ) max 20 string cvs (mm for the ast) ]
+    } {
+        null null  % Sentinel: ok
+    } ifelse } ifelse
     dup null eq { pop pop true } {
         dup 0 exch {length add} forall string
         exch 0 exch { dup length 2 index add 3 index 4 2 roll putinterval } forall pop
@@ -1194,21 +1193,21 @@ begin
 %  Dispatcher table
 %
 /render.dispatch <<
-    /apply_ast            //render.apply_ast
-    /ast                  //render.ast
-    /groupoptions         //render.groupoptions
-    /textgroups           //render.textgroups
-    /rendertext           //render.rendertext
-    /validatetextoptions  //render.validatetextoptions
-    /gridfit              //render.gridfit
-    /global_encoder_defaults  //render.global_encoder_defaults
-    /global_renderer_defaults //render.global_renderer_defaults
-    /validate_common      //render.validate_common
-    /renderborder         //render.renderborder
-    /renderguards         //render.renderguards
-    /validate_xdim        //render.validate_xdim
-    /resolve_strictspec     //render.resolve_strictspec
-    /resolve_height       //render.resolve_height
+    /apply_ast                 //render.apply_ast
+    /ast                       //render.ast
+    /groupoptions              //render.groupoptions
+    /textgroups                //render.textgroups
+    /rendertext                //render.rendertext
+    /validatetextoptions       //render.validatetextoptions
+    /gridfit                   //render.gridfit
+    /global_encoder_defaults   //render.global_encoder_defaults
+    /global_renderer_defaults  //render.global_renderer_defaults
+    /validate_common           //render.validate_common
+    /renderborder              //render.renderborder
+    /renderguards              //render.renderguards
+    /validate_xdim             //render.validate_xdim
+    /resolve_strictspec        //render.resolve_strictspec
+    /resolve_height            //render.resolve_height
 >> readonly def
 
 /render {
