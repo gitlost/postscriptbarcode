@@ -1433,6 +1433,12 @@ proc  % First run: a = "1234"
 proc  % Subsequent: a starts as "1234", not "0000"!
 ```
 
+**Strings and names are interchangeable as dictionary keys** (PLRM 3.3.9):
+```postscript
+/d << /forward 1 >> def   % name key
+d (forward) known => true % string lookup matches; interpreter converts via cvn
+```
+
 
 ## Encoding Framework
 
