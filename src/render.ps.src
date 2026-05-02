@@ -303,7 +303,7 @@ begin
         } if
 
         % Split into lines
-        split () ne content () ne and {
+        split () ne {
             split length 1 ne {
                 /splitBad (split option must be a single character) makeerr false exit
             } if
