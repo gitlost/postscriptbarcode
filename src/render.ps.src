@@ -254,14 +254,14 @@ begin
                         } if
                         2 copy /s exch def /fn exch def
                         selectfont
-                        % Ink-centre offsets for single-char positioning
+                        % Ink-centre offsets
                         (0) stringwidth pop 2 div neg /xoff exch def
                         gsave newpath 0 0 moveto (0) false charpath pathbbox grestore
                         exch pop add 2 div neg /yoff exch def pop
                     } {
                         pop pop
                     } ifelse
-                    moveto dup length 1 eq { xoff yoff rmoveto } if show
+                    moveto xoff yoff rmoveto show
                 } forall
             } stopped {
                 /bwipp.fontTooSmall (The font size is too small) false exit
@@ -321,21 +321,17 @@ begin
         font size selectfont
 
         % Find true ascent of font
-        content length 0 eq {
-            0
-        } {
-            gsave
-            newpath 0 0 moveto (0) false charpath pathbbox
-            4 1 roll pop pop pop
-            grestore
-            currentfont /PaintType known {currentfont /PaintType get 2 eq} {false} ifelse
-            currentfont /StrokeWidth known and {
-                currentfont /StrokeWidth get 2 div 0 exch
-                currentfont /FontMatrix get dtransform
-                dup mul exch dup mul add sqrt
-                add
-            } if
-        } ifelse
+        gsave
+        newpath 0 0 moveto (0) false charpath pathbbox
+        4 1 roll pop pop pop
+        grestore
+        currentfont /PaintType known {currentfont /PaintType get 2 eq} {false} ifelse
+        currentfont /StrokeWidth known and {
+            currentfont /StrokeWidth get 2 div 0 exch
+            currentfont /FontMatrix get dtransform
+            dup mul exch dup mul add sqrt
+            add
+        } if
         /textascent exch def
 
         /textwidth 0 textlines { stringwidth pop 2 copy lt {exch} if pop } forall content length 1 sub gaps mul add def
