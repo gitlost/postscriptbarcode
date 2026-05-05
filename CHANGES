@@ -1,3 +1,10 @@
+2026-05-05
+
+* A provisional encoder for the D3 AQR symbology was added based on a draft specification. Details are likely to change if it is standardised.
+* The Han Xin Code encoder was expanded with support for GS1 mode and numeric compaction.
+* The JAB Code encoder was removed since the standard is unstable.
+
+
 2026-04-26
 
 * The ISBN, ISMN, ISSN and GS1 North American Coupon encoders were amended so that all regular text processing options work.
