@@ -114,6 +114,7 @@ databarlimitedcomposite=uk.co.terryburton.bwipp/databarlimitedcomposite
 databarexpandedcomposite=uk.co.terryburton.bwipp/databarexpandedcomposite
 databarexpandedstackedcomposite=uk.co.terryburton.bwipp/databarexpandedstackedcomposite
 gs1-128composite=uk.co.terryburton.bwipp/gs1-128composite
+d3aqr=uk.co.terryburton.bwipp/d3aqr
 gs1datamatrix=uk.co.terryburton.bwipp/gs1datamatrix
 gs1datamatrixrectangular=uk.co.terryburton.bwipp/gs1datamatrixrectangular
 gs1dldatamatrix=uk.co.terryburton.bwipp/gs1dldatamatrix

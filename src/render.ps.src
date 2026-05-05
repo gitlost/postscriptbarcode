@@ -632,6 +632,15 @@ begin
         /default                         << /xmin 0.250                                        >>
     >>
 
+    /d3aqr <<
+        /default                         <<              /xnom 1.440                           >>
+        (15)                             <<              /xnom 0.846                           >>
+        (25)                  3 index  % <<              /xnom 1.440                           >>
+        (40)                             <<              /xnom 2.290                           >>
+        (75)                             <<              /xnom 4.320                           >>
+        (150)                            <<              /xnom 8.460                           >>
+    >>
+
     /pharmacode <<
         /default                         << /xnom 0.500                            /hnom 8.000 >>
     >>

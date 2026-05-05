@@ -1,0 +1,253 @@
+% Barcode Writer in Pure PostScript
+% https://bwipp.terryburton.co.uk
+%
+% vim: set sw=4 sts=4 et:
+%
+% Copyright (c) 2004-2026 Terry Burton
+%
+% $Id$
+%
+% Permission is hereby granted, free of charge, to any
+% person obtaining a copy of this software and associated
+% documentation files (the "Software"), to deal in the
+% Software without restriction, including without
+% limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of
+% the Software, and to permit persons to whom the Software
+% is furnished to do so, subject to the following
+% conditions:
+%
+% The above copyright notice and this permission notice
+% shall be included in all copies or substantial portions
+% of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+% KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+% THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+% PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+% THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+% DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+% CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+% IN THE SOFTWARE.
+
+% --BEGIN ENCODER d3aqr--
+% --REQUIRES preamble raiseerror setuphooks processoptions parseinput setanycolor fifocache rsecbinary render renmatrix qrcode--
+% --DESC: D3 AQR (beta)
+% --EXAM: HELLO
+% --EXOP: category=2842 ast=25
+% --RNDR: renmatrix
+% --FMLY: Two-dimensional symbols
+currentglobal
+true setglobal
+/setpacking where {pop currentpacking true setpacking} if
+6 dict
+dup /raiseerror dup /uk.co.terryburton.bwipp findresource put
+dup /processoptions dup /uk.co.terryburton.bwipp findresource put
+dup /qrcode dup /uk.co.terryburton.bwipp findresource put
+dup /render dup /uk.co.terryburton.bwipp findresource put
+dup /renmatrix dup /uk.co.terryburton.bwipp findresource put
+begin
+
+%
+% Positions of the four 0.5X dash tips (two per arm)
+%
+/d3aqr.tips [ [ 6 2 ] [ 6 3 ]  [ 2 6 ] [ 3 6 ] ] readonly def
+
+%
+% x/y-positions of timing modules
+%
+/d3aqr.timingxs [ 19 23 27 31 ] readonly def
+
+/d3aqr {
+
+    32 dict begin
+    {
+
+    /dontdraw false def
+    /category -1 def
+    /strictspec false def
+    /propspec false def
+    /loosespec false def
+    /mag 1.0 def
+    /xdim -1.0 def
+    /ast (default) def
+    /xnom -1.0 def
+    /xmin -1.0 def
+    /xmax -1.0 def
+
+    null /apply //processoptions exec /options exch def
+    /global_encoder_defaults //render exec
+
+    /barcode exch def
+
+    /_render
+        dontdraw /uk.co.terryburton.bwipp.global_ctx dup where {exch get /enabledontdraw known} {pop false} ifelse and
+        /uk.co.terryburton.bwipp._dontdraw dup where {exch get} {pop false} ifelse or not
+    def
+
+    %
+    % Validate options.
+    %
+    category -1 eq {
+        /bwipp.d3aqrMissingCategory (The category option is required) //raiseerror exec
+    } if
+    category 0 lt category 16383 gt or {
+        /bwipp.d3aqrCategoryOutOfRange (Category must be between 0 and 16383 inclusive) //raiseerror exec
+    } if
+
+    %
+    % Apply AST spec overrides and resolve physical specification
+    %
+    /d3aqr ast /apply_ast //render exec not { //raiseerror exec } if
+    /resolve_strictspec //render exec
+
+    %
+    % Encode the host QR Code, forcing modunit to 2 so that each host module is
+    % 1 cell of the composite grid. Ensures that 2.5 D3-X finder and host are
+    % pixel-locked.
+    %
+    /uk.co.terryburton.bwipp._dontdraw true def
+    << options {} forall >>  % Deep copy of options
+    dup (modunit) 2 put
+    dup (category) undef
+    dup (strictspec) undef
+    dup (loosespec) undef
+    dup (propspec) undef
+    dup (mag) undef
+    dup (ast) undef
+    dup (xdim) undef
+    dup (xnom) undef
+    dup (xmin) undef
+    dup (xmax) undef
+    barcode exch //qrcode exec /args exch def
+
+    %
+    % Extract metrics of host symbol
+    %
+    /qrpixs args /pixs get def
+    /qrsize args /pixx get def
+
+    %
+    % Matrix sized to fit the full 9.5 D3-X arms and host symbol
+    %
+    /qroffset 2 29 qrsize sub 2 copy lt {exch} if pop def
+    /size qroffset qrsize add 6 add def
+
+    %
+    % 0-filled matrix. Each cell is half a D3-X (= 1 host QR module).
+    % Matrix is host_size + 8 cells, growing as necessary to fit the
+    % D3 component.
+    %
+    /pixs size size mul array def
+    0 1 size size mul 1 sub { pixs exch 0 put } for
+
+    %
+    % Place the host at qroffset from top-left
+    %
+    0 1 qrsize 1 sub {
+        /j exch def
+        pixs j qroffset add size mul qroffset add
+        qrpixs j qrsize mul qrsize getinterval
+        putinterval
+    } for
+
+    %
+    % Coordinate positions are measured in half-D3-X units (cells) from
+    % the bottom-right corner of the matrix, with x and y increasing
+    % leftward and upward respectively. paintcell paints a single cell
+    % at (x, y); paintmod paints a 2 x 2 module whose bottom-right cell
+    % sits at (x, y); paintmodsym paints a module at (x, y) and at the
+    % diagonal mirror (y, x), used for fixtures shared between the
+    % bottom and right arms by symmetry.
+    %
+    /paintcell {  % paint a single cell at (x, y)
+        size exch sub 1 sub size mul exch
+        size exch sub 1 sub add
+        pixs exch 1 put
+    } bind def
+
+    /paintmod {  % 2x2 module with bottom-right cell at (x, y)
+        2 copy                       paintcell  % x   y
+        2 copy 1 add                 paintcell  % x   y+1
+        2 copy       exch 1 add exch paintcell  % x+1 y
+               1 add exch 1 add exch paintcell  % x+1 y+1
+    } bind def
+
+    /paintmodsym {
+        2 copy paintmod  % x y
+        exch   paintmod  % y x
+    } bind def
+
+    %
+    % Finder (reversed-L and dots)
+    %
+     2 2 paintmod            % Elbow
+     4 2 paintmodsym         % Arm
+    //d3aqr.tips {           % Tips
+        aload pop paintcell
+    } forall
+     9 2 paintmodsym         % Dots
+    13 2 paintmodsym
+
+    %
+    % Timing modules
+    %
+    //d3aqr.timingxs {
+        0 paintmodsym
+    } forall
+
+    %
+    % Place data bits and accumulated parity
+    %
+    1
+    7 1 13 {
+        /i exch def
+        category -1 i mul bitshift 1 and
+        dup 1 eq { 45 i 2 mul sub 2 paintmod } if
+        xor
+    } for
+    1 eq { 33 2 paintmod } if  % parity
+
+    1
+    0 1 6 {
+        /i exch def
+        category -1 i mul bitshift 1 and
+        dup 1 eq { 2 31 i 2 mul sub paintmod } if
+        xor
+    } for
+    1 eq { 2 33 paintmod } if  % parity
+
+    %
+    % Build the intermediate dictionary.
+    %
+    <<
+    /ren /renmatrix
+    /pixs pixs
+    /pixx size
+    /pixy size
+    /height size 2 mul 2 div 72 div
+    /width size 2 mul 2 div 72 div
+    /strictspec strictspec
+    /loosespec loosespec
+    /xdim xdim
+    /xnom xnom
+    /xmin xmin
+    /xmax xmax
+    /modunit 2
+    /opt options
+    >>
+
+    _render //renmatrix if
+
+    } stopped {end stop} if
+    end
+
+}
+[/barcode] {null def} forall
+bind def
+/d3aqr dup load /uk.co.terryburton.bwipp defineresource pop
+end
+/setpacking where {pop setpacking} if
+setglobal
+% --END ENCODER d3aqr--
