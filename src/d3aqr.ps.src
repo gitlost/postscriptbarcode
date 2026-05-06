@@ -55,11 +55,6 @@ begin
 /d3aqr.tips [ [ 6 2 ] [ 6 3 ]  [ 2 6 ] [ 3 6 ] ] readonly def
 
 %
-% x/y-positions of timing modules
-%
-/d3aqr.timingxs [ 19 23 27 31 ] readonly def
-
-%
 % Accepted D3:host pitch ratios mapped to (halfx, hostmod) cell counts.
 %
 /d3aqr.hostratios <<
@@ -219,32 +214,27 @@ begin
     13 2 paintmodsym
 
     %
-    % Timing modules
+    % Place timing modules alongside data bits and accumulated parity.
     %
-    //d3aqr.timingxs {
-        0 paintmodsym
-    } forall
-
-    %
-    % Place data bits and accumulated parity
-    %
-    1
-    7 1 13 {
-        /i exch def
-        category -1 i mul bitshift 1 and
-        dup 1 eq { 45 i 2 mul sub 2 paintmod } if
-        xor
-    } for
-    1 eq { 33 2 paintmod } if  % parity
-
-    1
+    0
     0 1 6 {
         /i exch def
+        i 2 mod 0 eq { 0 31 i 2 mul sub paintmod } if
         category -1 i mul bitshift 1 and
         dup 1 eq { 2 31 i 2 mul sub paintmod } if
         xor
     } for
-    1 eq { 2 33 paintmod } if  % parity
+    1 eq { 2 33 paintmod } if  % parity p0
+
+    1
+    7 1 13 {
+        /i exch def
+        i 2 mod 1 eq { 45 i 2 mul sub 0 paintmod } if
+        category -1 i mul bitshift 1 and
+        dup 1 eq { 45 i 2 mul sub 2 paintmod } if
+        xor
+    } for
+    1 eq { 33 2 paintmod } if  % parity p1
 
     %
     % Build the intermediate dictionary.
