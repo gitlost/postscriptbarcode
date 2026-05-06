@@ -35,7 +35,7 @@
 % --REQUIRES preamble raiseerror setuphooks processoptions parseinput setanycolor fifocache rsecbinary render renmatrix qrcode--
 % --DESC: D3 AQR (beta)
 % --EXAM: HTTPS://ID.GS1.ORG/01/09521234543213/22/ABC%2D123?99=XYZ-987
-% --EXOP: category=2842
+% --EXOP: category=2842 hostratio=2
 % --RNDR: renmatrix
 % --FMLY: Two-dimensional symbols
 currentglobal
@@ -59,6 +59,15 @@ begin
 %
 /d3aqr.timingxs [ 19 23 27 31 ] readonly def
 
+%
+% Accepted D3:host pitch ratios mapped to (halfx, hostmod) cell counts.
+%
+/d3aqr.hostratios <<
+    2.0  << /halfx 1  /hostmod 1 >>
+    2.5  << /halfx 5  /hostmod 4 >>
+    3.0  << /halfx 3  /hostmod 2 >>
+>> readonly def
+
 /d3aqr {
 
     32 dict begin
@@ -66,6 +75,7 @@ begin
 
     /dontdraw false def
     /category -1 def
+    /hostratio 2.0 def
     /strictspec false def
     /propspec false def
     /loosespec false def
@@ -97,6 +107,17 @@ begin
     } if
 
     %
+    % Resolve halfx and hostmod from hostratio.
+    %
+    //d3aqr.hostratios hostratio 2 copy known not {
+        pop pop
+        /bwipp.d3aqrInvalidHostRatio (hostratio must be 2, 2.5 or 3) //raiseerror exec
+    } if
+    get
+    dup /halfx   get /halfx   exch def
+        /hostmod get /hostmod exch def
+
+    %
     % Apply AST spec overrides and resolve physical specification
     %
     /d3aqr ast /apply_ast //render exec not { //raiseerror exec } if
@@ -125,56 +146,63 @@ begin
     %
     % Extract metrics of host symbol
     %
-    /qrpixs args /pixs get def
-    /qrsize args /pixx get def
+    /hostpixs args /pixs get def
+    /hostsize args /pixx get def
 
     %
-    % Matrix sized to fit the full 9.5 D3-X arms and host symbol
+    % Matrix sized to fit the full 9.5 D3-X arms and host symbol.
+    % hostoffset is the top-left padding in cells; it grows beyond a
+    % single 1 D3-X frame as necessary to fit the D3 component.
     %
-    /qroffset 2 29 qrsize sub 2 copy lt {exch} if pop def
-    /size qroffset qrsize add 6 add def
+    /hostcells hostsize hostmod mul def
+    /hostoffset 2 halfx mul 29 halfx mul hostcells sub 2 copy lt {exch} if pop def
+    /size hostoffset hostcells add 6 halfx mul add def
 
     %
-    % 0-filled matrix. Each cell is half a D3-X (= 1 host QR module).
-    % Matrix is host_size + 8 cells, growing as necessary to fit the
-    % D3 component.
+    % 0-filled matrix. Each cell is half a D3-X; each host module
+    % occupies hostmod x hostmod cells.
     %
     /pixs size size mul array def
     0 1 size size mul 1 sub { pixs exch 0 put } for
 
     %
-    % Place the host at qroffset from top-left
+    % Place the host: each input cell maps to a hostmod x hostmod output block.
     %
-    0 1 qrsize 1 sub {
+    0 1 hostcells 1 sub {
         /j exch def
-        pixs j qroffset add size mul qroffset add
-        qrpixs j qrsize mul qrsize getinterval
-        putinterval
+        /pixrow  j hostoffset add size mul hostoffset add def
+        /hostrow j hostmod idiv hostsize mul def
+        0 1 hostcells 1 sub {
+            /i exch def
+            hostpixs hostrow i hostmod idiv add get 1 eq {
+                pixs pixrow i add 1 put
+            } if
+        } for
     } for
 
     %
     % Coordinate positions are measured in half-D3-X units (cells) from
     % the bottom-right corner of the matrix, with x and y increasing
-    % leftward and upward respectively. paintcell paints a single cell
-    % at (x, y); paintmod paints a 2 x 2 module whose bottom-right cell
-    % sits at (x, y); paintmodsym paints a module at (x, y) and at the
-    % diagonal mirror (y, x), used for fixtures shared between the
-    % bottom and right arms by symmetry.
+    % leftward and upward respectively.
     %
-    /paintcell {  % paint a single cell at (x, y)
-        size exch sub 1 sub size mul exch
-        size exch sub 1 sub add
-        pixs exch 1 put
+    /paintcell {  % paint a halfx x halfx cell block at half-D3-X (x,y)
+        halfx mul size 1 sub exch sub /row0 exch def
+        halfx mul size 1 sub exch sub /col0 exch def
+        0 1 halfx 1 sub { /dy exch def
+            0 1 halfx 1 sub { /dx exch def
+                pixs row0 dy sub size mul col0 dx sub add 1 put
+            } for
+        } for
     } bind def
 
-    /paintmod {  % 2x2 module with bottom-right cell at (x, y)
+    /paintmod {  % paint 2x2 module with bottom-right cell at (x, y)
         2 copy                       paintcell  % x   y
         2 copy 1 add                 paintcell  % x   y+1
         2 copy       exch 1 add exch paintcell  % x+1 y
                1 add exch 1 add exch paintcell  % x+1 y+1
     } bind def
 
-    /paintmodsym {
+    /paintmodsym {  % paints a module at (x,y) and (y,x)
         2 copy paintmod  % x y
         exch   paintmod  % y x
     } bind def
@@ -234,7 +262,7 @@ begin
     /xnom xnom
     /xmin xmin
     /xmax xmax
-    /modunit 2
+    /modunit halfx 2 mul
     /opt options
     >>
 

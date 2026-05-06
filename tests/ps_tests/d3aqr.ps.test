@@ -22,6 +22,13 @@
     exch isError
 } def
 
+/sz_tmpl {
+    3 1 roll { 0 0 d3aqr /pixx get }
+    dup 3 -1 roll 1 exch put
+    dup 3 -1 roll 0 exch put
+    isEqual
+} def
+
 
 %
 % Examples are based on D3 AQR symbology specification Rev C draft
@@ -218,7 +225,34 @@
 
 
 %
+% Matrix size for each accepted hostratio across QR versions.
+%
+(HI) (category=2842 version=1  dontdraw)               35 sz_tmpl
+(HI) (category=2842 version=3  dontdraw)               37 sz_tmpl
+(HI) (category=2842 version=10 dontdraw)               65 sz_tmpl
+(HI) (category=2842 version=40 dontdraw)              185 sz_tmpl
+
+(HI) (category=2842 version=1  hostratio=2.5 dontdraw) 175 sz_tmpl
+(HI) (category=2842 version=3  hostratio=2.5 dontdraw) 175 sz_tmpl
+(HI) (category=2842 version=10 hostratio=2.5 dontdraw) 268 sz_tmpl
+
+(HI) (category=2842 version=1  hostratio=3 dontdraw)   105 sz_tmpl
+(HI) (category=2842 version=3  hostratio=3 dontdraw)   105 sz_tmpl
+(HI) (category=2842 version=10 hostratio=3 dontdraw)   138 sz_tmpl
+
+
+%
 % Errors
 %
-(HELLO) (dontdraw) /bwipp.d3aqrMissingCategory er_tmpl
-(HELLO) (category=16384 dontdraw) /bwipp.d3aqrCategoryOutOfRange er_tmpl
+(HELLO) (dontdraw)                                /bwipp.d3aqrMissingCategory    er_tmpl
+(HELLO) (category=-1 dontdraw)                    /bwipp.d3aqrMissingCategory    er_tmpl
+(HELLO) (category=-2 dontdraw)                    /bwipp.d3aqrCategoryOutOfRange er_tmpl
+(HELLO) (category=16384 dontdraw)                 /bwipp.d3aqrCategoryOutOfRange er_tmpl
+(HELLO) (category=99999 dontdraw)                 /bwipp.d3aqrCategoryOutOfRange er_tmpl
+(HELLO) (category=2842 hostratio=1 dontdraw)      /bwipp.d3aqrInvalidHostRatio   er_tmpl
+(HELLO) (category=2842 hostratio=1.5 dontdraw)    /bwipp.d3aqrInvalidHostRatio   er_tmpl
+(HELLO) (category=2842 hostratio=2.25 dontdraw)   /bwipp.d3aqrInvalidHostRatio   er_tmpl
+(HELLO) (category=2842 hostratio=2.75 dontdraw)   /bwipp.d3aqrInvalidHostRatio   er_tmpl
+(HELLO) (category=2842 hostratio=3.5 dontdraw)    /bwipp.d3aqrInvalidHostRatio   er_tmpl
+(HELLO) (category=2842 hostratio=4 dontdraw)      /bwipp.d3aqrInvalidHostRatio   er_tmpl
+(HELLO) (category=2842 hostratio=10 dontdraw)     /bwipp.d3aqrInvalidHostRatio   er_tmpl
